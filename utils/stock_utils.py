@@ -1,40 +1,78 @@
 import pandas as pd
+import yfinance as yf
 import requests
 from io import StringIO
+import streamlit as st
 
+
+@st.cache_data(ttl=86400)
 def get_nifty_500_symbols():
     """
-    Fetches the latest list of NIFTY 500 stock symbols from NSE India.
-    Returns a list of stock symbols.
+    Fetch the latest NIFTY 500 symbols from NSE website.
+    Returns list of symbols (e.g., ['RELIANCE', 'INFY', ...])
     """
     try:
-        # URL to the NIFTY 500 constituents CSV
-        csv_url = "https://www.nseindia.com/content/indices/ind_nifty500list.csv"
-
-        # Set headers to mimic a browser visit
+        url = "https://www.nseindia.com/content/indices/ind_nifty500list.csv"
         headers = {
             "User-Agent": "Mozilla/5.0",
             "Referer": "https://www.nseindia.com/"
         }
 
-        # Create a session to handle cookies and headers
         session = requests.Session()
         session.headers.update(headers)
-
-        # Make an initial request to establish the session
         session.get("https://www.nseindia.com", timeout=5)
 
-        # Fetch the CSV file
-        response = session.get(csv_url, timeout=10)
-        response.raise_for_status()  # Raise an error for bad status codes
+        response = session.get(url, timeout=10)
+        response.raise_for_status()
 
-        # Read the CSV content
         df = pd.read_csv(StringIO(response.text))
-
-        # Extract the 'Symbol' column and return as a list
-        symbols = df['Symbol'].tolist()
-        return symbols
+        return df['Symbol'].tolist()
 
     except Exception as e:
-        print(f"Error fetching NIFTY 500 symbols: {e}")
+        print(f"Failed to fetch NIFTY 500 symbols: {e}")
         return []
+
+
+@st.cache_data(ttl=3600)
+def get_top_50_stocks():
+    """
+    Filters top 50 fundamentally strong stocks from NIFTY 500.
+    """
+    symbols = get_nifty_500_symbols()
+    all_data = []
+
+    for symbol in symbols:
+        try:
+            ticker = yf.Ticker(symbol + ".NS")
+            info = ticker.info
+
+            # Check required fields
+            if not all(k in info for k in ['trailingPE', 'marketCap', 'trailingEps']):
+                continue
+
+            pe = info.get("trailingPE", 0)
+            roe = info.get("returnOnEquity", 0)
+            eps = info.get("trailingEps", 0)
+
+            if (
+                info.get("marketCap", 0) > 1e10 and
+                0 < pe < 40 and
+                eps > 0 and
+                roe and roe > 0.10
+            ):
+                all_data.append({
+                    "Symbol": symbol,
+                    "Name": info.get("shortName", ""),
+                    "Market Cap": info.get("marketCap", 0),
+                    "PE Ratio": pe,
+                    "ROE": f"{roe * 100:.2f}%",
+                    "EPS": eps,
+                    "Dividend Yield": f"{(info.get('dividendYield') or 0) * 100:.2f}%",
+                    "Sector": info.get("sector", "")
+                })
+
+        except Exception:
+            continue
+
+    df = pd.DataFrame(all_data)
+    return df.sort_values("Market Cap", ascending=False).head(50).reset_index(drop=True)
