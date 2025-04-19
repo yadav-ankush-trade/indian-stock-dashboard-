@@ -8,10 +8,11 @@ import streamlit as st
 @st.cache_data(ttl=86400)
 def get_nifty_500_symbols():
     """
-    Fetch the latest NIFTY 500 symbols from NSE website.
+    Fetch the latest NIFTY 500 stock symbols from NSE website.
     Returns list of symbols (e.g., ['RELIANCE', 'INFY', ...])
     """
     try:
+        st.write("📥 Fetching NIFTY 500 list from NSE...")
         url = "https://www.nseindia.com/content/indices/ind_nifty500list.csv"
         headers = {
             "User-Agent": "Mozilla/5.0",
@@ -26,10 +27,12 @@ def get_nifty_500_symbols():
         response.raise_for_status()
 
         df = pd.read_csv(StringIO(response.text))
-        return df['Symbol'].tolist()
+        symbols = df['Symbol'].tolist()
+        st.success(f"✅ Loaded {len(symbols)} NIFTY 500 symbols.")
+        return symbols
 
     except Exception as e:
-        print(f"Failed to fetch NIFTY 500 symbols: {e}")
+        st.error(f"⚠️ Failed to fetch NIFTY 500 symbols: {e}")
         return []
 
 
@@ -39,14 +42,19 @@ def get_top_50_stocks():
     Filters top 50 fundamentally strong stocks from NIFTY 500.
     """
     symbols = get_nifty_500_symbols()
-    all_data = []
 
+    if not symbols:
+        st.warning("⚠️ No symbols to process.")
+        return pd.DataFrame()
+
+    st.write(f"🔍 Processing {len(symbols)} stocks...")
+
+    all_data = []
     for symbol in symbols:
         try:
             ticker = yf.Ticker(symbol + ".NS")
             info = ticker.info
 
-            # Check required fields
             if not all(k in info for k in ['trailingPE', 'marketCap', 'trailingEps']):
                 continue
 
@@ -71,8 +79,15 @@ def get_top_50_stocks():
                     "Sector": info.get("sector", "")
                 })
 
-        except Exception:
+        except Exception as e:
+            st.write(f"❌ Error fetching {symbol}: {e}")
             continue
 
+    if not all_data:
+        st.warning("⚠️ No fundamentally strong stocks found.")
+        return pd.DataFrame()
+
     df = pd.DataFrame(all_data)
-    return df.sort_values("Market Cap", ascending=False).head(50).reset_index(drop=True)
+    df = df.sort_values(by="Market Cap", ascending=False).head(50).reset_index(drop=True)
+    st.success(f"✅ Found {len(df)} top fundamentally strong stocks.")
+    return df
