@@ -19,7 +19,7 @@ def get_nifty_500_symbols():
     """
     try:
         st.write("📥 Fetching NIFTY 500 list from NSE...")
-        url = "https://nsearchives.nseindia.com/content/indices/ind_nifty500list.csv
+        url = "https://nsearchives.nseindia.com/content/indices/ind_nifty500list.csv"
         headers = {
             "User-Agent": "Mozilla/5.0",
             "Referer": "https://www.nseindia.com/"
