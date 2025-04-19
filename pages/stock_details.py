@@ -1,13 +1,14 @@
 import streamlit as st
 import yfinance as yf
-from utils.stock_utils import get_top_50_stocks
+from utils.stock_utils import get_nifty_500_symbols
 
 st.set_page_config(page_title="Stock Details", layout="centered")
 
 st.title("📊 Stock Details Viewer")
 
-stock_list = get_top_50_stocks()['Symbol'].tolist()
-selected_stock = st.selectbox("Choose a stock to view details:", stock_list)
+# Pull live symbols
+symbols = get_nifty_500_symbols()
+selected_stock = st.selectbox("Choose a stock to view details:", sorted(symbols))
 
 if selected_stock:
     ticker = yf.Ticker(selected_stock + ".NS")
