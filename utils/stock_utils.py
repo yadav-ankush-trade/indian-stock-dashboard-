@@ -1,3 +1,4 @@
+import os
 import pandas as pd
 import yfinance as yf
 import requests
@@ -5,11 +6,16 @@ from io import StringIO
 import streamlit as st
 
 
+DATA_DIR = "data"
+FALLBACK_FILE = os.path.join(DATA_DIR, "nifty500_fallback.csv")
+
+os.makedirs(DATA_DIR, exist_ok=True)
+
+
 @st.cache_data(ttl=86400)
 def get_nifty_500_symbols():
     """
-    Fetch the latest NIFTY 500 stock symbols from NSE website.
-    Returns list of symbols (e.g., ['RELIANCE', 'INFY', ...])
+    Try fetching live NIFTY 500 symbols. If it fails, use fallback CSV.
     """
     try:
         st.write("📥 Fetching NIFTY 500 list from NSE...")
@@ -28,19 +34,40 @@ def get_nifty_500_symbols():
 
         df = pd.read_csv(StringIO(response.text))
         symbols = df['Symbol'].tolist()
-        st.success(f"✅ Loaded {len(symbols)} NIFTY 500 symbols.")
+        st.success(f"✅ Loaded {len(symbols)} NIFTY 500 symbols (live).")
+
+        # Save fallback
+        df.to_csv(FALLBACK_FILE, index=False)
+
         return symbols
 
     except Exception as e:
-        st.error(f"⚠️ Failed to fetch NIFTY 500 symbols: {e}")
-        return []
+        st.warning(f"⚠️ Failed to fetch live data: {e}")
+
+        if os.path.exists(FALLBACK_FILE):
+            st.info("📂 Using fallback NIFTY 500 CSV from data directory.")
+            df = pd.read_csv(FALLBACK_FILE)
+            return df['Symbol'].tolist()
+
+        # Ask user to upload file
+        uploaded_file = st.file_uploader(
+            "📤 Upload a NIFTY 500 CSV file (must include 'Symbol' column):",
+            type=["csv"]
+        )
+        if uploaded_file:
+            df = pd.read_csv(uploaded_file)
+            if "Symbol" not in df.columns:
+                st.error("❌ Uploaded file does not contain 'Symbol' column.")
+                return []
+            df.to_csv(FALLBACK_FILE, index=False)
+            st.success("✅ File uploaded and saved. Using it now.")
+            return df["Symbol"].tolist()
+
+        st.stop()
 
 
 @st.cache_data(ttl=3600)
 def get_top_50_stocks():
-    """
-    Filters top 50 fundamentally strong stocks from NIFTY 500.
-    """
     symbols = get_nifty_500_symbols()
 
     if not symbols:
